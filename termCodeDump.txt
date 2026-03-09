@@ -1,0 +1,47 @@
+
+; 64tass Turbo Assembler Macro V1.59.3120 listing file
+; 64tass -L termCodeDump.txt -b --output term.bin term.asm
+; Tue Mar 03 23:15:49 2026
+
+;Offset	;Hex		;Monitor	;Source
+
+;******  Processing input file: term.asm
+
+=$dd80					WCTRL = $dd80
+=$dd81					WDATA = $dd81
+=$dd82					WFIFO = $dd82
+=$7800					BUFFER = $7800
+=$7ff					BUFFER_SIZE = $7ff
+=$b0					BUFFER_POINTER = $b0    ;2 bytes to indicate the next write position in the buffer
+=$b2					BUFFER_LENGTH = $b2     ;2 bytes to indicate the current length of loaded data in the buffer
+.7700					start:
+.7700	ad 82 dd	lda $dd82	    lda WFIFO
+.7703	d0 01		bne $7706	    bne Read_Buffer
+.7705	60		rts		    rts
+.7706					Read_Buffer:
+.7706	ad 81 dd	lda $dd81	    lda WDATA
+.7709	92 b0		sta ($b0)	    sta (BUFFER_POINTER)
+.770b	18		clc		    clc
+.770c	a5 b0		lda $b0		    lda BUFFER_POINTER
+.770e	69 01		adc #$01	    adc #$01
+.7710	85 b0		sta $b0		    sta BUFFER_POINTER
+.7712	a5 b1		lda $b1		    lda BUFFER_POINTER+1
+.7714	69 00		adc #$00	    adc #$00
+.7716	85 b1		sta $b1		    sta BUFFER_POINTER+1
+.7718	c9 80		cmp #$80	    cmp #$80
+.771a	90 08		bcc $7724	    bcc Increase_length
+.771c	a9 00		lda #$00	    lda #<BUFFER
+.771e	85 b0		sta $b0		    sta BUFFER_POINTER
+.7720	a9 78		lda #$78	    lda #>BUFFER
+.7722	85 b1		sta $b1		    sta BUFFER_POINTER+1
+.7724					Increase_length:
+.7724	18		clc		    clc
+.7725	a5 b2		lda $b2		    lda BUFFER_LENGTH
+.7727	69 01		adc #$01	    adc #$01
+.7729	85 b2		sta $b2		    sta BUFFER_LENGTH
+.772b	a5 b3		lda $b3		    lda BUFFER_LENGTH+1
+.772d	69 00		adc #$00	    adc #$00
+.772f	85 b3		sta $b3		    sta BUFFER_LENGTH+1
+.7731	80 cd		bra $7700	    bra start
+
+;******  End of listing

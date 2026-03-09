@@ -1,0 +1,12 @@
+# Generated binaries and archives
+*.bin
+*.zip
+
+# Logs and temporary files
+*.log
+*.tmp
+*.bak
+
+# OS/editor noise
+Thumbs.db
+.DS_Store
