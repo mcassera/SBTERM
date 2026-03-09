@@ -219,190 +219,201 @@
 1115 '
 1120 proc readterm()
 1125     t$= chr$(peek(peekw($b2)))
-1130     checkipd()
-1135     pokew $b2, peekw($b2)+1
-1140     if peekw($b2)>=$7fff then pokew $b2,$7800
-1145 endproc
-1150 '
-1155 proc printpayload()
-1160     for n=1 to peek($b6)
-1165         readone()
-1170     next
-1175 endproc
-1180 '
-1185 proc checkipd()
-1190     st=peek($b5)
-1195     rm=peekw($b6)
-1200     handled=0
+1130     st=peek($b5)
+1135     if st=6
+1140         print t$;
+1145         rm=peekw($b6)-1
+1150         pokew $b6,rm
+1155         if rm<=0
+1160             poke $b5,0
+1165             pokew $b6,0
+1170         endif
+1175     else
+1180         checkipd()
+1185     endif
+1190     pokew $b2, peekw($b2)+1
+1195     if peekw($b2)>=$7fff then pokew $b2,$7800
+1200 endproc
+1205 '
+1210 proc printpayload()
+1215     for n=1 to peek($b6)
+1220         readone()
+1225     next
+1230 endproc
+1235 '
+1240 proc checkipd()
+1245     st=peek($b5)
+1250     rm=peekw($b6)
+1255     handled=0
 
-1205     if (st=0) & (handled=0)
-1210         if t$="+"
-1215             poke $b5,1
-1220         else
-1225             print t$;
-1230         endif
-1235         handled=1
-1240     endif
+1260     if (st=0) & (handled=0)
+1265         if t$="+"
+1270             poke $b5,1
+1275         else
+1280             print t$;
+1285         endif
+1290         handled=1
+1295     endif
 
-1245     if (st=1) & (handled=0)
-1250         if t$="I"
-1255             poke $b5,2
-1260         else
-1265             print "+";
-1270             if t$="+"
-1275                 poke $b5,1
-1280             else
-1285                 print t$;
-1290                 poke $b5,0
-1295             endif
-1300         endif
-1305         handled=1
-1310     endif
+1300     if (st=1) & (handled=0)
+1305         if t$="I"
+1310             poke $b5,2
+1315         else
+1320             print "+";
+1325             if t$="+"
+1330                 poke $b5,1
+1335             else
+1340                 print t$;
+1345                 poke $b5,0
+1350             endif
+1355         endif
+1360         handled=1
+1365     endif
 
-1315     if (st=2) & (handled=0)
-1320         if t$="P"
-1325             poke $b5,3
-1330         else
-1335             print "+I";
-1340             if t$="+"
-1345                 poke $b5,1
-1350             else
-1355                 print t$;
-1360                 poke $b5,0
-1365             endif
-1370         endif
-1375         handled=1
-1380     endif
+1370     if (st=2) & (handled=0)
+1375         if t$="P"
+1380             poke $b5,3
+1385         else
+1390             print "+I";
+1395             if t$="+"
+1400                 poke $b5,1
+1405             else
+1410                 print t$;
+1415                 poke $b5,0
+1420             endif
+1425         endif
+1430         handled=1
+1435     endif
 
-1385     if (st=3) & (handled=0)
-1390         if t$="D"
-1395             poke $b5,4
-1400         else
-1405             print "+IP";
-1410             if t$="+"
-1415                 poke $b5,1
-1420             else
-1425                 print t$;
-1430                 poke $b5,0
-1435             endif
-1440         endif
-1445         handled=1
-1450     endif
+1440     if (st=3) & (handled=0)
+1445         if t$="D"
+1450             poke $b5,4
+1455         else
+1460             print "+IP";
+1465             if t$="+"
+1470                 poke $b5,1
+1475             else
+1480                 print t$;
+1485                 poke $b5,0
+1490             endif
+1495         endif
+1500         handled=1
+1505     endif
 
-1455     if (st=4) & (handled=0)
-1460         if t$=","
-1465             pokew $b6,0
-1470             poke $b5,5
-1475         else
-1480             print "+IPD";
-1485             if t$="+"
-1490                 poke $b5,1
-1495             else
-1500                 print t$;
-1505                 poke $b5,0
-1510             endif
-1515         endif
-1520         handled=1
-1525     endif
+1510     if (st=4) & (handled=0)
+1515         if t$=","
+1520             pokew $b6,0
+1525             poke $b5,5
+1530         else
+1535             print "+IPD";
+1540             if t$="+"
+1545                 poke $b5,1
+1550             else
+1555                 print t$;
+1560                 poke $b5,0
+1565             endif
+1570         endif
+1575         handled=1
+1580     endif
 
-1530     if (st=5) & (handled=0)
-1535         ch=asc(t$)
-1540         if (ch>=48) & (ch<=57)
-1545             rm=(rm*10)+(ch-48)
-1550             pokew $b6,rm
-1555         else
-1560             if (t$=":") & (rm>0)
-1565                 poke $b5,6
-1570             else
-1575                 print "+IPD,";
-1580                 print str$(rm);
-1585                 print t$;
-1590                 poke $b5,0
-1595                 pokew $b6,0
-1600             endif
-1605         endif
-1610         handled=1
-1615     endif
+1585     if (st=5) & (handled=0)
+1590         ch=asc(t$)
+1595         if (ch>=48) & (ch<=57)
+1600             rm=(rm*10)+(ch-48)
+1605             pokew $b6,rm
+1610         else
+1615             if (t$=":") & (rm>0)
+1620                 poke $b5,6
+1625             else
+1630                 print "+IPD,";
+1635                 print str$(rm);
+1640                 print t$;
+1645                 poke $b5,0
+1650                 pokew $b6,0
+1655             endif
+1660         endif
+1665         handled=1
+1670     endif
 
-1620     if (st=6) & (handled=0)
-1625         print t$;
-1630         rm=rm-1
-1635         pokew $b6,rm
-1640         if rm<=0
-1645             poke $b5,0
-1650             pokew $b6,0
-1655         endif
-1660         handled=1
-1665     endif
+1675     if (st=6) & (handled=0)
+1680         print t$;
+1685         rm=rm-1
+1690         pokew $b6,rm
+1695         if rm<=0
+1700             poke $b5,0
+1705             pokew $b6,0
+1710         endif
+1715         handled=1
+1720     endif
 
-1670     if handled=0
-1675         poke $b5,0
-1680         pokew $b6,0
-1685         print t$;
-1690     endif
-1695 endproc
-1700 '
-1705 proc disconnect()
-1710     ' Send the AT command to disconnect from the server, and then
-1715     ' reset the WizNET module.
-1720     send$="AT+CIPCLOSE"+chr$(13)+chr$(10)
-1725     for s=1 to len(send$)
-1730         poke WIZ_DATA,asc(mid$(send$,s,1))
-1735     next
-1740     readstack()
-1745     for n=0 to 20000:next
-1750     send$="AT+RST"+chr$(13)+chr$(10)
-1755     for s=1 to len(send$)
-1760         poke WIZ_DATA,asc(mid$(send$,s,1))
-1765     next
-1770     readstack()
-1775 endproc
-1780 '
-1785 proc mlcode(read_buffer)
-1790     for pass=0 to 1
-1795         assemble read_buffer,pass
-1800         ' Check if there is data in the FIFO           
-1805         ' If there is, read and store it in the buffer,
-1810         ' and update the buffer pointer.               
-1815         ' if no datais available, return to BASIC.     
-1820         .start
-1825             lda $dd82          'Wiznet FIFO status register
-1830             bne read_wiznet 
-1835             rts     
-1840         'read a byte from the FIFO and store it in the buffer
-1845         .read_wiznet
-1850             lda $dd81          'Wiznet data register
-1855             sta ($b0)         
-1860         'incrment the buffer pointer
-1865             clc              
-1870             lda $b0
-1875             adc #$01
-1880             sta $b0
-1885             lda $b1
-1890             adc #$00
-1895             sta $b1            
-1900         ' compair pointer to the end of the buffer              
-1905         ' and reset to the beginning if we have reached the end.
-1910             cmp #$80           
-1915             bcc start                    
-1920             stz $b0
-1925             lda #$78
-1930             sta $b1
-1935             bra start        
-1940     next
-1945 endproc
-1950 '
-1955 ' initialize the WizNET chip with these AT commands
-1960 data "AT+GMR"
-1965 data "AT+UART_CUR?"
-1970 data "AT+CWMODE_CUR=1"
-1975 data "AT+CWMODE_CUR?"
-1980 data "AT+CIPMUX=0"
-1985 data "stop"
+1725     if handled=0
+1730         poke $b5,0
+1735         pokew $b6,0
+1740         print t$;
+1745     endif
+1750 endproc
+1755 '
+1760 proc disconnect()
+1765     ' Send the AT command to disconnect from the server, and then
+1770     ' reset the WizNET module.
+1775     send$="AT+CIPCLOSE"+chr$(13)+chr$(10)
+1780     for s=1 to len(send$)
+1785         poke WIZ_DATA,asc(mid$(send$,s,1))
+1790     next
+1795     readstack()
+1800     for n=0 to 20000:next
+1805     send$="AT+RST"+chr$(13)+chr$(10)
+1810     for s=1 to len(send$)
+1815         poke WIZ_DATA,asc(mid$(send$,s,1))
+1820     next
+1825     readstack()
+1830 endproc
+1835 '
+1840 proc mlcode(read_buffer)
+1845     for pass=0 to 1
+1850         assemble read_buffer,pass
+1855         ' Check if there is data in the FIFO           
+1860         ' If there is, read and store it in the buffer,
+1865         ' and update the buffer pointer.               
+1870         ' if no datais available, return to BASIC.     
+1875         .start
+1880             lda $dd82          'Wiznet FIFO status register
+1885             bne read_wiznet 
+1890             rts     
+1895         'read a byte from the FIFO and store it in the buffer
+1900         .read_wiznet
+1905             lda $dd81          'Wiznet data register
+1910             sta ($b0)         
+1915         'incrment the buffer pointer
+1920             clc              
+1925             lda $b0
+1930             adc #$01
+1935             sta $b0
+1940             lda $b1
+1945             adc #$00
+1950             sta $b1            
+1955         ' compair pointer to the end of the buffer              
+1960         ' and reset to the beginning if we have reached the end.
+1965             cmp #$80           
+1970             bcc start                    
+1975             stz $b0
+1980             lda #$78
+1985             sta $b1
+1990             bra start        
+1995     next
+2000 endproc
+2005 '
+2010 ' initialize the WizNET chip with these AT commands
+2015 data "AT+GMR"
+2020 data "AT+UART_CUR?"
+2025 data "AT+CWMODE_CUR=1"
+2030 data "AT+CWMODE_CUR?"
+2035 data "AT+CIPMUX=0"
+2040 data "stop"
 
-1990 ' connect to the wifi network
-1995 data "AT+CWJAP_CUR='Defiance','CorvairCorsa'"
-2000 data "AT+CIPSTA_CUR?"
+2045 ' connect to the wifi network
+2050 data "AT+CWJAP_CUR='Defiance','CorvairCorsa'"
+2055 data "AT+CIPSTA_CUR?"
 
-2005 ' connect to the server
-2010 data "AT+CIPSTART='TCP','192.168.17.54',8119"
+2060 ' connect to the server
+2065 data "AT+CIPSTART='TCP','192.168.17.54',8119"

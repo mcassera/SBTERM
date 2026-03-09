@@ -1,12 +1,15 @@
 # Generated binaries and archives
 *.bin
 *.zip
+*.ini
 
 # Logs and temporary files
 *.log
 *.tmp
 *.bak
+*.bat
 
 # OS/editor noise
 Thumbs.db
 .DS_Store
+add_line_numbers.py

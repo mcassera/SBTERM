@@ -129,7 +129,7 @@ proc sendkeyboard(k)
         if trimguard>64 then trimdone=1
     wend
 endproc
-'
+
 proc initialize(stackread,read_buffer)
     ' intialize the terminal by sending the AT commands from the 
     ' data statements drop down to the terminal once the commands
@@ -145,7 +145,7 @@ proc initialize(stackread,read_buffer)
         endif
     until a$="stop"
 endproc
-'
+
 proc sendcommand(a$)
     ' Send an AT command to the WizNET module by writing
     ' each character to the WIZ_DATA register, followed 
@@ -158,7 +158,7 @@ proc sendcommand(a$)
     poke WIZ_DATA,$0d
     poke WIZ_DATA,$0a
 endproc
-'
+
 proc checkresponse()
     ' Check the response from the WizNET module after
     ' sending each AT command         
@@ -172,7 +172,7 @@ proc checkresponse()
     if mid$(rsp$,5,4)="FAIL" then poke $b4,3
     if mid$(rsp$,3,6)="CLOSED" then poke $b4,4
 endproc
-'
+
 proc connect()
     ' Connect to the WiFi network by sending the appropriate
     ' AT commands to the WizNET module. The code waits for a
@@ -204,32 +204,43 @@ proc connect()
     for n=0 to 20000:next
     call read_buffer
 endproc 
-'
+
 proc readstack()
     while peekw($b2) <> peekw($b0) 
         readterm()
     wend
 endproc
-'
+
 proc readone()
     print chr$(peek(peekw($b2)));
     pokew $b2, peekw($b2)+1
     if peekw($b2)>=$7fff then pokew $b2,$7800
 endproc
-'
+
 proc readterm()
     t$= chr$(peek(peekw($b2)))
-    checkipd()
+    st=peek($b5)
+    if st=6
+        print t$;
+        rm=peekw($b6)-1
+        pokew $b6,rm
+        if rm<=0
+            poke $b5,0
+            pokew $b6,0
+        endif
+    else
+        checkipd()
+    endif
     pokew $b2, peekw($b2)+1
     if peekw($b2)>=$7fff then pokew $b2,$7800
 endproc
-'
+
 proc printpayload()
     for n=1 to peek($b6)
         readone()
     next
 endproc
-'
+
 proc checkipd()
     st=peek($b5)
     rm=peekw($b6)
@@ -341,7 +352,7 @@ proc checkipd()
         print t$;
     endif
 endproc
-'
+
 proc disconnect()
     ' Send the AT command to disconnect from the server, and then
     ' reset the WizNET module.
@@ -357,7 +368,7 @@ proc disconnect()
     next
     readstack()
 endproc
-'
+
 proc mlcode(read_buffer)
     for pass=0 to 1
         assemble read_buffer,pass
@@ -391,7 +402,7 @@ proc mlcode(read_buffer)
             bra start        
     next
 endproc
-'
+
 ' initialize the WizNET chip with these AT commands
 data "AT+GMR"
 data "AT+UART_CUR?"
