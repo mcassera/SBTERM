@@ -453,7 +453,7 @@
 2185 data "stop"
 
 2190 ' connect to the wifi network
-2195 data "AT+CWJAP_CUR='Defiance','CorvairCorsa'"
+2195 data "AT+CWJAP_CUR='SSID','PASSWORD'"
 2200 data "AT+CIPSTA_CUR?"
 
 2205 ' connect to the server

@@ -453,7 +453,7 @@ data "AT+CIPMUX=0"
 data "stop"
 
 ' connect to the wifi network
-data "AT+CWJAP_CUR='Defiance','CorvairCorsa'"
+data "AT+CWJAP_CUR='SSID','PASSWORD'"
 data "AT+CIPSTA_CUR?"
 
 ' connect to the server
