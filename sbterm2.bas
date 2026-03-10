@@ -11,12 +11,14 @@ stackread = $7800
 stack = $b0
 stackread = $b2
 read_buffer = alloc(40)
+send_key = alloc(72)
 
 print chr$(144) 'set background to black
 print chr$(131) 'set foreground to green
 cls
 
 mlcode(read_buffer)    'assembly for reading from the WizNET FIFO
+sendmlcode(send_key)          'assembly for sending keyboard input to the WizNET module
 
 pokew stack,$7800
 pokew stackread,$7800
@@ -42,7 +44,7 @@ repeat
             if k=129
                 disconnect()
             else
-                sendkeyboard(k)
+                sendkeyboard()
             endif
         endif
         clcon=clcon+1
@@ -53,29 +55,10 @@ until peek($b4)=4
 print "Connection closed by server"
 end
 
-proc sendkeyboard(k)
-    ' Send the AT command to prepare for sending data to the server
-    ' wait for the prompt '>' from the WizNET module, then send the
-    ' key that was pressed on the keyboard to the server.
-    send$="AT+CIPSEND=1"+chr$(13)+chr$(10)
-    for s=1 to len(send$)
-        poke WIZ_DATA,asc(mid$(send$,s,1))
-    next
-
-    ' Wait for the CIPSEND prompt using the ring buffer.
-    resp=0
-    while resp<>62
-        call read_buffer
-        if peekw($b2) <> peekw($b0)
-            resp=peek(peekw($b2))
-            pokew $b2, peekw($b2)+1
-            if peekw($b2)>=$7fff then pokew $b2,$7800
-        endif
-    wend  
-
-    ' Send the key payload byte.
-    poke WIZ_DATA,k
-
+proc sendkeyboard()
+    ' send the wizNET send command and wait for the > prompt
+    ' then send the keyboard input to the WizNET module. 
+    call send_key
     ' Suppress local chip status chatter (Recv and SEND OK).
     tag$="SEND OK"
     idx=1
@@ -131,6 +114,13 @@ proc sendkeyboard(k)
 endproc
 
 proc initialize(stackread,read_buffer)
+    ' setup up memory for keyboard send. 
+    ' store sting starting at $c0 and then use the assembly
+    ' routine to send it to the WizNET module.
+    send$="AT+CIPSEND=1"+chr$(13)+chr$(10)
+    for s=1 to len(send$)
+        poke $bf+s,asc(mid$(send$,s,1))
+    next
     ' intialize the terminal by sending the AT commands from the 
     ' data statements drop down to the terminal once the commands
     ' have been sent. There is no error handling in this code.   
@@ -369,6 +359,57 @@ proc disconnect()
     readstack()
 endproc
 
+proc sendmlcode(send_key)
+    for pass=0 to 1
+        assemble send_key,pass
+        .st
+        ' grab that key from the buffer to send to the 
+        ' wiznet module, and then return to BASIC.
+            stz $680
+            ldx #$00
+        .loopx
+            lda ($c0),x
+            sta WIZ_DATA
+            inx
+            cpx #$0e
+            bcc loopx
+        .wait
+            jsr read_buffer
+            lda $b1
+            cmp $b3
+            beq chklo
+            bra chkforprompt
+        .chklo
+            lda $b0
+            cmp $b2
+            beq wait
+        .chkforprompt
+            lda ($b2)
+            cmp #62
+            beq send_key
+        .nextchar
+            clc
+            lda $b2
+            adc #1
+            sta $b2
+            lda $b3
+            adc #0
+            sta $b3
+            cmp #$80
+            bcc wait
+            stz $b2
+            lda #$78
+            sta $b3
+            bra wait
+        .send_key
+            lda $678
+            sta WIZ_DATA
+            rts
+    next
+endproc
+
+
+        
 proc mlcode(read_buffer)
     for pass=0 to 1
         assemble read_buffer,pass

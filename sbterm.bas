@@ -11,409 +11,450 @@
  140 stack = $b0
  145 stackread = $b2
  150 read_buffer = alloc(40)
+ 155 send_key = alloc(72)
 
- 155 print chr$(144) 'set background to black
- 160 print chr$(131) 'set foreground to green
- 165 cls
+ 160 print chr$(144) 'set background to black
+ 165 print chr$(131) 'set foreground to green
+ 170 cls
 
- 170 mlcode(read_buffer)    'assembly for reading from the WizNET FIFO
+ 175 mlcode(read_buffer)    'assembly for reading from the WizNET FIFO
+ 180 sendmlcode(send_key)          'assembly for sending keyboard input to the WizNET module
 
- 175 pokew stack,$7800
- 180 pokew stackread,$7800
- 185 poke $b5,0          'reset the state machine for parsing IPD
- 190 pokew $b6,0         'reset the payload length counter
- 195 poke WIZ_CTRL,$00   'Initialize the WizNET control register
+ 185 pokew stack,$7800
+ 190 pokew stackread,$7800
+ 195 poke $b5,0          'reset the state machine for parsing IPD
+ 200 pokew $b6,0         'reset the payload length counter
+ 205 poke WIZ_CTRL,$00   'Initialize the WizNET control register
 
- 200 initialize(stackread,read_buffer)    ' initialize the WizNET module
- 205 connect()       ' Connect to the WiFi network
- 210 'server()        ' Connect to the server
+ 210 initialize(stackread,read_buffer)    ' initialize the WizNET module
+ 215 connect()       ' Connect to the WiFi network
+ 220 'server()        ' Connect to the server
 
 
- 215 ' The terminal interface is active. We are looping and checking for 
- 220 ' data from Wiznet as well as the keyboard. $680 is the keyboard
- 225 ' status register.
- 230 repeat
- 235     clcon=0
- 240     repeat
- 245         call read_buffer
- 250         if peekw(stackread) <> peekw(stack) then readterm()
- 255         if peek($680)<>0 
- 260             k=inkey()
- 265             if k=129
- 270                 disconnect()
- 275             else
- 280                 sendkeyboard(k)
- 285             endif
- 290         endif
- 295         clcon=clcon+1
- 300     until clcon=100
- 305     readstack()
- 310     checkresponse()
- 315 until peek($b4)=4
- 320 print "Connection closed by server"
- 325 end
+ 225 ' The terminal interface is active. We are looping and checking for 
+ 230 ' data from Wiznet as well as the keyboard. $680 is the keyboard
+ 235 ' status register.
+ 240 repeat
+ 245     clcon=0
+ 250     repeat
+ 255         call read_buffer
+ 260         if peekw(stackread) <> peekw(stack) then readterm()
+ 265         if peek($680)<>0 
+ 270             k=inkey()
+ 275             if k=129
+ 280                 disconnect()
+ 285             else
+ 290                 sendkeyboard()
+ 295             endif
+ 300         endif
+ 305         clcon=clcon+1
+ 310     until clcon=100
+ 315     readstack()
+ 320     checkresponse()
+ 325 until peek($b4)=4
+ 330 print "Connection closed by server"
+ 335 end
 
- 330 proc sendkeyboard(k)
- 335     ' Send the AT command to prepare for sending data to the server
- 340     ' wait for the prompt '>' from the WizNET module, then send the
- 345     ' key that was pressed on the keyboard to the server.
- 350     send$="AT+CIPSEND=1"+chr$(13)+chr$(10)
- 355     for s=1 to len(send$)
- 360         poke WIZ_DATA,asc(mid$(send$,s,1))
- 365     next
+ 340 proc sendkeyboard()
+ 345     ' send the wizNET send command and wait for the > prompt
+ 350     ' then send the keyboard input to the WizNET module. 
+ 355     call send_key
+ 360     ' Suppress local chip status chatter (Recv and SEND OK).
+ 365     tag$="SEND OK"
+ 370     idx=1
+ 375     done=0
+ 380     guard=0
+ 385     while done=0
+ 390         call read_buffer
+ 395         if peekw($b2) <> peekw($b0)
+ 400             c=peek(peekw($b2))
+ 405             pokew $b2, peekw($b2)+1
+ 410             if peekw($b2)>=$7fff then pokew $b2,$7800
 
- 370     ' Wait for the CIPSEND prompt using the ring buffer.
- 375     resp=0
- 380     while resp<>62
- 385         call read_buffer
- 390         if peekw($b2) <> peekw($b0)
- 395             resp=peek(peekw($b2))
- 400             pokew $b2, peekw($b2)+1
- 405             if peekw($b2)>=$7fff then pokew $b2,$7800
- 410         endif
- 415     wend  
+ 415             if c=asc(mid$(tag$,idx,1))
+ 420                 idx=idx+1
+ 425                 if idx>len(tag$) then done=1
+ 430             else
+ 435                 if c=asc(mid$(tag$,1,1))
+ 440                     idx=2
+ 445                 else
+ 450                     idx=1
+ 455                 endif
+ 460             endif
+ 465         endif
 
- 420     ' Send the key payload byte.
- 425     poke WIZ_DATA,k
+ 470         guard=guard+1
+ 475         if guard>20000 then done=1
+ 480     wend
 
- 430     ' Suppress local chip status chatter (Recv and SEND OK).
- 435     tag$="SEND OK"
- 440     idx=1
- 445     done=0
- 450     guard=0
- 455     while done=0
- 460         call read_buffer
- 465         if peekw($b2) <> peekw($b0)
- 470             c=peek(peekw($b2))
- 475             pokew $b2, peekw($b2)+1
- 480             if peekw($b2)>=$7fff then pokew $b2,$7800
+ 485     ' Drop trailing CR/LF bytes generated by local send acknowledgement.
+ 490     trimdone=0
+ 495     trimguard=0
+ 500     while trimdone=0
+ 505         call read_buffer
+ 510         if peekw($b2) <> peekw($b0)
+ 515             c=peek(peekw($b2))
+ 520             if c=13
+ 525                 pokew $b2, peekw($b2)+1
+ 530                 if peekw($b2)>=$7fff then pokew $b2,$7800
+ 535             else
+ 540                 if c=10
+ 545                     pokew $b2, peekw($b2)+1
+ 550                     if peekw($b2)>=$7fff then pokew $b2,$7800
+ 555                 else
+ 560                     trimdone=1
+ 565                 endif
+ 570             endif
+ 575         else
+ 580             trimdone=1
+ 585         endif
+ 590         trimguard=trimguard+1
+ 595         if trimguard>64 then trimdone=1
+ 600     wend
+ 605 endproc
 
- 485             if c=asc(mid$(tag$,idx,1))
- 490                 idx=idx+1
- 495                 if idx>len(tag$) then done=1
- 500             else
- 505                 if c=asc(mid$(tag$,1,1))
- 510                     idx=2
- 515                 else
- 520                     idx=1
- 525                 endif
- 530             endif
- 535         endif
+ 610 proc initialize(stackread,read_buffer)
+ 615     ' setup up memory for keyboard send. 
+ 620     ' store sting starting at $c0 and then use the assembly
+ 625     ' routine to send it to the WizNET module.
+ 630     send$="AT+CIPSEND=1"+chr$(13)+chr$(10)
+ 635     for s=1 to len(send$)
+ 640         poke $bf+s,asc(mid$(send$,s,1))
+ 645     next
+ 650     ' intialize the terminal by sending the AT commands from the 
+ 655     ' data statements drop down to the terminal once the commands
+ 660     ' have been sent. There is no error handling in this code.   
+ 665     repeat
+ 670         read a$
+ 675         if a$<>"stop"
+ 680             sendcommand(a$)
+ 685             for n=0 to 10000:next
+ 690             call read_buffer
+ 695             readstack()
+ 700             checkresponse()
+ 705         endif
+ 710     until a$="stop"
+ 715 endproc
 
- 540         guard=guard+1
- 545         if guard>20000 then done=1
- 550     wend
+ 720 proc sendcommand(a$)
+ 725     ' Send an AT command to the WizNET module by writing
+ 730     ' each character to the WIZ_DATA register, followed 
+ 735     ' by a carriage return and line feed.
+ 740     for n=1 to len(a$)
+ 745         b=asc(mid$(a$,n,1))
+ 750         if b=39 then b=34
+ 755         poke WIZ_DATA,b
+ 760     next
+ 765     poke WIZ_DATA,$0d
+ 770     poke WIZ_DATA,$0a
+ 775 endproc
 
- 555     ' Drop trailing CR/LF bytes generated by local send acknowledgement.
- 560     trimdone=0
- 565     trimguard=0
- 570     while trimdone=0
- 575         call read_buffer
- 580         if peekw($b2) <> peekw($b0)
- 585             c=peek(peekw($b2))
- 590             if c=13
- 595                 pokew $b2, peekw($b2)+1
- 600                 if peekw($b2)>=$7fff then pokew $b2,$7800
- 605             else
- 610                 if c=10
- 615                     pokew $b2, peekw($b2)+1
- 620                     if peekw($b2)>=$7fff then pokew $b2,$7800
- 625                 else
- 630                     trimdone=1
- 635                 endif
- 640             endif
- 645         else
- 650             trimdone=1
- 655         endif
- 660         trimguard=trimguard+1
- 665         if trimguard>64 then trimdone=1
- 670     wend
- 675 endproc
- 680 '
- 685 proc initialize(stackread,read_buffer)
- 690     ' intialize the terminal by sending the AT commands from the 
- 695     ' data statements drop down to the terminal once the commands
- 700     ' have been sent. There is no error handling in this code.   
- 705     repeat
- 710         read a$
- 715         if a$<>"stop"
- 720             sendcommand(a$)
- 725             for n=0 to 10000:next
- 730             call read_buffer
- 735             readstack()
- 740             checkresponse()
- 745         endif
- 750     until a$="stop"
- 755 endproc
- 760 '
- 765 proc sendcommand(a$)
- 770     ' Send an AT command to the WizNET module by writing
- 775     ' each character to the WIZ_DATA register, followed 
- 780     ' by a carriage return and line feed.
- 785     for n=1 to len(a$)
- 790         b=asc(mid$(a$,n,1))
- 795         if b=39 then b=34
- 800         poke WIZ_DATA,b
- 805     next
- 810     poke WIZ_DATA,$0d
- 815     poke WIZ_DATA,$0a
- 820 endproc
- 825 '
- 830 proc checkresponse()
- 835     ' Check the response from the WizNET module after
- 840     ' sending each AT command         
- 845     check=peekw($b0)  
- 850     rsp$=""  
- 855     for n=check-10 to check-1
- 860         rsp$=rsp$+chr$(peek(n))
- 865     next
- 870     if mid$(rsp$,7,2)="OK" then poke $b4,1
- 875     if mid$(rsp$,4,5)="ERROR" then poke $b4,2
- 880     if mid$(rsp$,5,4)="FAIL" then poke $b4,3
- 885     if mid$(rsp$,3,6)="CLOSED" then poke $b4,4
- 890 endproc
- 895 '
- 900 proc connect()
- 905     ' Connect to the WiFi network by sending the appropriate
- 910     ' AT commands to the WizNET module. The code waits for a
- 915     ' response after each command and checks if the connection
- 920     ' was successful.
- 925     read a$
- 930     sendcommand(a$)
- 935     for n=0 to 5000:next
- 940     call read_buffer
- 945     readstack()
- 950     poke $b4,0
- 955     while peek($b4)<>1
- 960         for n=0 to 20000:next
- 965         call read_buffer
- 970         readstack()
- 975         checkresponse()
- 980         if peek($b4)=3 
- 985             print "Failed to connect to WiFi network"
- 990             stop
- 995         endif
-1000     wend
-1005     read a$
-1010     sendcommand(a$)
-1015     for n=0 to 20000:next
-1020     call read_buffer
-1025     readstack()
-1030     read a$
-1035     sendcommand(a$)
-1040     for n=0 to 20000:next
-1045     call read_buffer
-1050 endproc 
-1055 '
-1060 proc readstack()
-1065     while peekw($b2) <> peekw($b0) 
-1070         readterm()
-1075     wend
-1080 endproc
-1085 '
-1090 proc readone()
-1095     print chr$(peek(peekw($b2)));
-1100     pokew $b2, peekw($b2)+1
-1105     if peekw($b2)>=$7fff then pokew $b2,$7800
-1110 endproc
-1115 '
-1120 proc readterm()
-1125     t$= chr$(peek(peekw($b2)))
-1130     st=peek($b5)
-1135     if st=6
-1140         print t$;
-1145         rm=peekw($b6)-1
-1150         pokew $b6,rm
-1155         if rm<=0
-1160             poke $b5,0
-1165             pokew $b6,0
-1170         endif
-1175     else
-1180         checkipd()
-1185     endif
-1190     pokew $b2, peekw($b2)+1
-1195     if peekw($b2)>=$7fff then pokew $b2,$7800
-1200 endproc
-1205 '
-1210 proc printpayload()
-1215     for n=1 to peek($b6)
-1220         readone()
-1225     next
-1230 endproc
-1235 '
-1240 proc checkipd()
-1245     st=peek($b5)
-1250     rm=peekw($b6)
-1255     handled=0
+ 780 proc checkresponse()
+ 785     ' Check the response from the WizNET module after
+ 790     ' sending each AT command         
+ 795     check=peekw($b0)  
+ 800     rsp$=""  
+ 805     for n=check-10 to check-1
+ 810         rsp$=rsp$+chr$(peek(n))
+ 815     next
+ 820     if mid$(rsp$,7,2)="OK" then poke $b4,1
+ 825     if mid$(rsp$,4,5)="ERROR" then poke $b4,2
+ 830     if mid$(rsp$,5,4)="FAIL" then poke $b4,3
+ 835     if mid$(rsp$,3,6)="CLOSED" then poke $b4,4
+ 840 endproc
 
-1260     if (st=0) & (handled=0)
-1265         if t$="+"
-1270             poke $b5,1
-1275         else
-1280             print t$;
-1285         endif
-1290         handled=1
-1295     endif
+ 845 proc connect()
+ 850     ' Connect to the WiFi network by sending the appropriate
+ 855     ' AT commands to the WizNET module. The code waits for a
+ 860     ' response after each command and checks if the connection
+ 865     ' was successful.
+ 870     read a$
+ 875     sendcommand(a$)
+ 880     for n=0 to 5000:next
+ 885     call read_buffer
+ 890     readstack()
+ 895     poke $b4,0
+ 900     while peek($b4)<>1
+ 905         for n=0 to 20000:next
+ 910         call read_buffer
+ 915         readstack()
+ 920         checkresponse()
+ 925         if peek($b4)=3 
+ 930             print "Failed to connect to WiFi network"
+ 935             stop
+ 940         endif
+ 945     wend
+ 950     read a$
+ 955     sendcommand(a$)
+ 960     for n=0 to 20000:next
+ 965     call read_buffer
+ 970     readstack()
+ 975     read a$
+ 980     sendcommand(a$)
+ 985     for n=0 to 20000:next
+ 990     call read_buffer
+ 995 endproc 
 
-1300     if (st=1) & (handled=0)
-1305         if t$="I"
-1310             poke $b5,2
-1315         else
-1320             print "+";
-1325             if t$="+"
-1330                 poke $b5,1
-1335             else
-1340                 print t$;
-1345                 poke $b5,0
-1350             endif
-1355         endif
-1360         handled=1
-1365     endif
+1000 proc readstack()
+1005     while peekw($b2) <> peekw($b0) 
+1010         readterm()
+1015     wend
+1020 endproc
 
-1370     if (st=2) & (handled=0)
-1375         if t$="P"
-1380             poke $b5,3
-1385         else
-1390             print "+I";
-1395             if t$="+"
-1400                 poke $b5,1
-1405             else
-1410                 print t$;
-1415                 poke $b5,0
-1420             endif
-1425         endif
-1430         handled=1
-1435     endif
+1025 proc readone()
+1030     print chr$(peek(peekw($b2)));
+1035     pokew $b2, peekw($b2)+1
+1040     if peekw($b2)>=$7fff then pokew $b2,$7800
+1045 endproc
 
-1440     if (st=3) & (handled=0)
-1445         if t$="D"
-1450             poke $b5,4
-1455         else
-1460             print "+IP";
-1465             if t$="+"
-1470                 poke $b5,1
-1475             else
-1480                 print t$;
-1485                 poke $b5,0
-1490             endif
-1495         endif
-1500         handled=1
-1505     endif
+1050 proc readterm()
+1055     t$= chr$(peek(peekw($b2)))
+1060     st=peek($b5)
+1065     if st=6
+1070         print t$;
+1075         rm=peekw($b6)-1
+1080         pokew $b6,rm
+1085         if rm<=0
+1090             poke $b5,0
+1095             pokew $b6,0
+1100         endif
+1105     else
+1110         checkipd()
+1115     endif
+1120     pokew $b2, peekw($b2)+1
+1125     if peekw($b2)>=$7fff then pokew $b2,$7800
+1130 endproc
 
-1510     if (st=4) & (handled=0)
-1515         if t$=","
-1520             pokew $b6,0
-1525             poke $b5,5
+1135 proc printpayload()
+1140     for n=1 to peek($b6)
+1145         readone()
+1150     next
+1155 endproc
+
+1160 proc checkipd()
+1165     st=peek($b5)
+1170     rm=peekw($b6)
+1175     handled=0
+
+1180     if (st=0) & (handled=0)
+1185         if t$="+"
+1190             poke $b5,1
+1195         else
+1200             print t$;
+1205         endif
+1210         handled=1
+1215     endif
+
+1220     if (st=1) & (handled=0)
+1225         if t$="I"
+1230             poke $b5,2
+1235         else
+1240             print "+";
+1245             if t$="+"
+1250                 poke $b5,1
+1255             else
+1260                 print t$;
+1265                 poke $b5,0
+1270             endif
+1275         endif
+1280         handled=1
+1285     endif
+
+1290     if (st=2) & (handled=0)
+1295         if t$="P"
+1300             poke $b5,3
+1305         else
+1310             print "+I";
+1315             if t$="+"
+1320                 poke $b5,1
+1325             else
+1330                 print t$;
+1335                 poke $b5,0
+1340             endif
+1345         endif
+1350         handled=1
+1355     endif
+
+1360     if (st=3) & (handled=0)
+1365         if t$="D"
+1370             poke $b5,4
+1375         else
+1380             print "+IP";
+1385             if t$="+"
+1390                 poke $b5,1
+1395             else
+1400                 print t$;
+1405                 poke $b5,0
+1410             endif
+1415         endif
+1420         handled=1
+1425     endif
+
+1430     if (st=4) & (handled=0)
+1435         if t$=","
+1440             pokew $b6,0
+1445             poke $b5,5
+1450         else
+1455             print "+IPD";
+1460             if t$="+"
+1465                 poke $b5,1
+1470             else
+1475                 print t$;
+1480                 poke $b5,0
+1485             endif
+1490         endif
+1495         handled=1
+1500     endif
+
+1505     if (st=5) & (handled=0)
+1510         ch=asc(t$)
+1515         if (ch>=48) & (ch<=57)
+1520             rm=(rm*10)+(ch-48)
+1525             pokew $b6,rm
 1530         else
-1535             print "+IPD";
-1540             if t$="+"
-1545                 poke $b5,1
-1550             else
-1555                 print t$;
-1560                 poke $b5,0
-1565             endif
-1570         endif
-1575         handled=1
-1580     endif
+1535             if (t$=":") & (rm>0)
+1540                 poke $b5,6
+1545             else
+1550                 print "+IPD,";
+1555                 print str$(rm);
+1560                 print t$;
+1565                 poke $b5,0
+1570                 pokew $b6,0
+1575             endif
+1580         endif
+1585         handled=1
+1590     endif
 
-1585     if (st=5) & (handled=0)
-1590         ch=asc(t$)
-1595         if (ch>=48) & (ch<=57)
-1600             rm=(rm*10)+(ch-48)
-1605             pokew $b6,rm
-1610         else
-1615             if (t$=":") & (rm>0)
-1620                 poke $b5,6
-1625             else
-1630                 print "+IPD,";
-1635                 print str$(rm);
-1640                 print t$;
-1645                 poke $b5,0
-1650                 pokew $b6,0
-1655             endif
-1660         endif
-1665         handled=1
-1670     endif
+1595     if (st=6) & (handled=0)
+1600         print t$;
+1605         rm=rm-1
+1610         pokew $b6,rm
+1615         if rm<=0
+1620             poke $b5,0
+1625             pokew $b6,0
+1630         endif
+1635         handled=1
+1640     endif
 
-1675     if (st=6) & (handled=0)
-1680         print t$;
-1685         rm=rm-1
-1690         pokew $b6,rm
-1695         if rm<=0
-1700             poke $b5,0
-1705             pokew $b6,0
-1710         endif
-1715         handled=1
-1720     endif
+1645     if handled=0
+1650         poke $b5,0
+1655         pokew $b6,0
+1660         print t$;
+1665     endif
+1670 endproc
 
-1725     if handled=0
-1730         poke $b5,0
-1735         pokew $b6,0
-1740         print t$;
-1745     endif
-1750 endproc
-1755 '
-1760 proc disconnect()
-1765     ' Send the AT command to disconnect from the server, and then
-1770     ' reset the WizNET module.
-1775     send$="AT+CIPCLOSE"+chr$(13)+chr$(10)
-1780     for s=1 to len(send$)
-1785         poke WIZ_DATA,asc(mid$(send$,s,1))
-1790     next
-1795     readstack()
-1800     for n=0 to 20000:next
-1805     send$="AT+RST"+chr$(13)+chr$(10)
-1810     for s=1 to len(send$)
-1815         poke WIZ_DATA,asc(mid$(send$,s,1))
-1820     next
-1825     readstack()
-1830 endproc
-1835 '
-1840 proc mlcode(read_buffer)
-1845     for pass=0 to 1
-1850         assemble read_buffer,pass
-1855         ' Check if there is data in the FIFO           
-1860         ' If there is, read and store it in the buffer,
-1865         ' and update the buffer pointer.               
-1870         ' if no datais available, return to BASIC.     
-1875         .start
-1880             lda $dd82          'Wiznet FIFO status register
-1885             bne read_wiznet 
-1890             rts     
-1895         'read a byte from the FIFO and store it in the buffer
-1900         .read_wiznet
-1905             lda $dd81          'Wiznet data register
-1910             sta ($b0)         
-1915         'incrment the buffer pointer
-1920             clc              
-1925             lda $b0
-1930             adc #$01
-1935             sta $b0
-1940             lda $b1
-1945             adc #$00
-1950             sta $b1            
-1955         ' compair pointer to the end of the buffer              
-1960         ' and reset to the beginning if we have reached the end.
-1965             cmp #$80           
-1970             bcc start                    
-1975             stz $b0
-1980             lda #$78
-1985             sta $b1
-1990             bra start        
-1995     next
-2000 endproc
-2005 '
-2010 ' initialize the WizNET chip with these AT commands
-2015 data "AT+GMR"
-2020 data "AT+UART_CUR?"
-2025 data "AT+CWMODE_CUR=1"
-2030 data "AT+CWMODE_CUR?"
-2035 data "AT+CIPMUX=0"
-2040 data "stop"
+1675 proc disconnect()
+1680     ' Send the AT command to disconnect from the server, and then
+1685     ' reset the WizNET module.
+1690     send$="AT+CIPCLOSE"+chr$(13)+chr$(10)
+1695     for s=1 to len(send$)
+1700         poke WIZ_DATA,asc(mid$(send$,s,1))
+1705     next
+1710     readstack()
+1715     for n=0 to 20000:next
+1720     send$="AT+RST"+chr$(13)+chr$(10)
+1725     for s=1 to len(send$)
+1730         poke WIZ_DATA,asc(mid$(send$,s,1))
+1735     next
+1740     readstack()
+1745 endproc
 
-2045 ' connect to the wifi network
-2050 data "AT+CWJAP_CUR='Defiance','CorvairCorsa'"
-2055 data "AT+CIPSTA_CUR?"
+1750 proc sendmlcode(send_key)
+1755     for pass=0 to 1
+1760         assemble send_key,pass
+1765         .st
+1770         ' grab that key from the buffer to send to the 
+1775         ' wiznet module, and then return to BASIC.
+1780             stz $680
+1785             ldx #$00
+1790         .loopx
+1795             lda ($c0),x
+1800             sta WIZ_DATA
+1805             inx
+1810             cpx #$0e
+1815             bcc loopx
+1820         .wait
+1825             jsr read_buffer
+1830             lda $b1
+1835             cmp $b3
+1840             beq chklo
+1845             bra chkforprompt
+1850         .chklo
+1855             lda $b0
+1860             cmp $b2
+1865             beq wait
+1870         .chkforprompt
+1875             lda ($b2)
+1880             cmp #62
+1885             beq send_key
+1890         .nextchar
+1895             clc
+1900             lda $b2
+1905             adc #1
+1910             sta $b2
+1915             lda $b3
+1920             adc #0
+1925             sta $b3
+1930             cmp #$80
+1935             bcc wait
+1940             stz $b2
+1945             lda #$78
+1950             sta $b3
+1955             bra wait
+1960         .send_key
+1965             lda $678
+1970             sta WIZ_DATA
+1975             rts
+1980     next
+1985 endproc
 
-2060 ' connect to the server
-2065 data "AT+CIPSTART='TCP','192.168.17.54',8119"
+
+        
+1990 proc mlcode(read_buffer)
+1995     for pass=0 to 1
+2000         assemble read_buffer,pass
+2005         ' Check if there is data in the FIFO           
+2010         ' If there is, read and store it in the buffer,
+2015         ' and update the buffer pointer.               
+2020         ' if no datais available, return to BASIC.     
+2025         .start
+2030             lda $dd82          'Wiznet FIFO status register
+2035             bne read_wiznet 
+2040             rts     
+2045         'read a byte from the FIFO and store it in the buffer
+2050         .read_wiznet
+2055             lda $dd81          'Wiznet data register
+2060             sta ($b0)         
+2065         'incrment the buffer pointer
+2070             clc              
+2075             lda $b0
+2080             adc #$01
+2085             sta $b0
+2090             lda $b1
+2095             adc #$00
+2100             sta $b1            
+2105         ' compair pointer to the end of the buffer              
+2110         ' and reset to the beginning if we have reached the end.
+2115             cmp #$80           
+2120             bcc start                    
+2125             stz $b0
+2130             lda #$78
+2135             sta $b1
+2140             bra start        
+2145     next
+2150 endproc
+
+2155 ' initialize the WizNET chip with these AT commands
+2160 data "AT+GMR"
+2165 data "AT+UART_CUR?"
+2170 data "AT+CWMODE_CUR=1"
+2175 data "AT+CWMODE_CUR?"
+2180 data "AT+CIPMUX=0"
+2185 data "stop"
+
+2190 ' connect to the wifi network
+2195 data "AT+CWJAP_CUR='Defiance','CorvairCorsa'"
+2200 data "AT+CIPSTA_CUR?"
+
+2205 ' connect to the server
+2210 data "AT+CIPSTART='TCP','192.168.17.54',8119"
